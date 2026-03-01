@@ -19,13 +19,35 @@ from .validate_llm_settings import validate_llm_settings
 def start_terminal_interface(vulnera):
     """
     Meant to be used from the command line. Parses arguments, starts Vulnera's terminal interface.
+    
+    This function validates the vulnera instance and its attributes before attempting to use them.
     """
+    
+    # Validate input
+    if vulnera is None:
+        raise ValueError("vulnera instance cannot be None")
+    
+    if not hasattr(vulnera, 'llm') or vulnera.llm is None:
+        raise ValueError("vulnera.llm is missing or None - LLM not properly initialized")
+    
+    if not hasattr(vulnera, 'computer') or vulnera.computer is None:
+        raise ValueError("vulnera.computer is missing or None - Computer interface not properly initialized")
 
     # Instead use an async vulnera, which has a server. Set settings on that
     if "--server" in sys.argv:
         from vulnera import AsyncInterpreter
 
-        vulnera = AsyncInterpreter()
+        try:
+            vulnera = AsyncInterpreter()
+            if vulnera is None:
+                raise ValueError("AsyncInterpreter initialization returned None")
+            if not hasattr(vulnera, 'llm') or vulnera.llm is None:
+                raise ValueError("AsyncInterpreter.llm is missing or None")
+            if not hasattr(vulnera, 'computer') or vulnera.computer is None:
+                raise ValueError("AsyncInterpreter.computer is missing or None")
+        except Exception as e:
+            print(f"ERROR: Failed to initialize AsyncInterpreter for --server mode: {e}", file=sys.stderr)
+            raise
 
     arguments = [
         {
@@ -415,13 +437,20 @@ Use """ to write multi-line messages.
         return
 
     if args.no_highlight_active_line:
-        vulnera.highlight_active_line = False
+        if hasattr(vulnera, 'highlight_active_line'):
+            vulnera.highlight_active_line = False
+        else:
+            print("WARNING: highlight_active_line attribute not found on vulnera object", file=sys.stderr)
 
     # if safe_mode and auto_run are enabled, safe_mode disables auto_run
-    if vulnera.auto_run and (
-        vulnera.safe_mode == "ask" or vulnera.safe_mode == "auto"
-    ):
-        setattr(vulnera, "auto_run", False)
+    try:
+        auto_run = getattr(vulnera, 'auto_run', False)
+        safe_mode = getattr(vulnera, 'safe_mode', 'off')
+        
+        if auto_run and (safe_mode == "ask" or safe_mode == "auto"):
+            setattr(vulnera, "auto_run", False)
+    except Exception as e:
+        print(f"WARNING: Error checking auto_run/safe_mode settings: {e}", file=sys.stderr)
 
     ### Set attributes on vulnera, so that a profile script can read the arguments passed in via the CLI
 
@@ -444,7 +473,16 @@ Use """ to write multi-line messages.
         args.profile = "local.py"
         if args.vision:
             # This is local vision, set up moondream!
-            vulnera.computer.vision.load()
+            try:
+                if vulnera and hasattr(vulnera, 'computer') and vulnera.computer:
+                    if hasattr(vulnera.computer, 'vision') and vulnera.computer.vision:
+                        vulnera.computer.vision.load()
+                    else:
+                        print("WARNING: vision module not available in computer interface", file=sys.stderr)
+                else:
+                    print("WARNING: computer interface not available for vision setup", file=sys.stderr)
+            except Exception as e:
+                print(f"WARNING: Failed to load vision module: {e}", file=sys.stderr)
         if args.os:
             args.profile = "local-os.py"
 
@@ -468,52 +506,78 @@ Use """ to write multi-line messages.
     if args.groq:
         args.profile = "groq.py"
 
-    vulnera = profile(
-        vulnera,
-        args.profile or get_argument_dictionary(arguments, "profile")["default"],
-    )
-
+    # Apply profile and validate result
+    try:
+        new_vulnera = profile(
+            vulnera,
+            args.profile or get_argument_dictionary(arguments, "profile")["default"],
+        )
+        
+        if new_vulnera is None:
+            raise ValueError("profile() returned None")
+        
+        vulnera = new_vulnera
+        
+        # Re-validate after profile application
+        if not hasattr(vulnera, 'llm') or vulnera.llm is None:
+            raise ValueError("After applying profile, vulnera.llm is missing or None")
+        if not hasattr(vulnera, 'computer') or vulnera.computer is None:
+            raise ValueError("After applying profile, vulnera.computer is missing or None")
+            
+    except Exception as e:
+        print(f"ERROR: Failed to apply profile '{args.profile or 'default.yaml'}': {e}", file=sys.stderr)
+        raise
     ### Set attributes on vulnera, because the arguments passed in via the CLI should override profile
 
     set_attributes(args, arguments)
-    vulnera.disable_telemetry = (
-        os.getenv("DISABLE_TELEMETRY", "false").lower() == "true"
-        or args.disable_telemetry
-    )
+    
+    # Set disable_telemetry with proper error handling
+    try:
+        vulnera.disable_telemetry = (
+            os.getenv("DISABLE_TELEMETRY", "false").lower() == "true"
+            or args.disable_telemetry
+        )
+    except Exception as e:
+        print(f"WARNING: Could not set disable_telemetry: {e}", file=sys.stderr)
 
     ### Set some helpful settings we know are likely to be true
 
-    if vulnera.llm.model == "gpt-4" or vulnera.llm.model == "openai/gpt-4":
-        if vulnera.llm.context_window is None:
-            vulnera.llm.context_window = 6500
-        if vulnera.llm.max_tokens is None:
-            vulnera.llm.max_tokens = 4096
-        if vulnera.llm.supports_functions is None:
-            vulnera.llm.supports_functions = (
-                False if "vision" in vulnera.llm.model else True
-            )
+    # Verify model is set before trying to configure it
+    try:
+        model_name = getattr(vulnera.llm, 'model', None)
+        
+        if model_name is None:
+            print("WARNING: Model name not set. Skipping model-specific configuration.", file=sys.stderr)
+        else:
+            if model_name == "gpt-4" or model_name == "openai/gpt-4":
+                if vulnera.llm.context_window is None:
+                    vulnera.llm.context_window = 6500
+                if vulnera.llm.max_tokens is None:
+                    vulnera.llm.max_tokens = 4096
+                if vulnera.llm.supports_functions is None:
+                    vulnera.llm.supports_functions = (
+                        False if "vision" in model_name else True
+                    )
 
-    elif vulnera.llm.model.startswith("gpt-4") or vulnera.llm.model.startswith(
-        "openai/gpt-4"
-    ):
-        if vulnera.llm.context_window is None:
-            vulnera.llm.context_window = 123000
-        if vulnera.llm.max_tokens is None:
-            vulnera.llm.max_tokens = 4096
-        if vulnera.llm.supports_functions is None:
-            vulnera.llm.supports_functions = (
-                False if "vision" in vulnera.llm.model else True
-            )
+            elif model_name.startswith("gpt-4") or model_name.startswith("openai/gpt-4"):
+                if vulnera.llm.context_window is None:
+                    vulnera.llm.context_window = 123000
+                if vulnera.llm.max_tokens is None:
+                    vulnera.llm.max_tokens = 4096
+                if vulnera.llm.supports_functions is None:
+                    vulnera.llm.supports_functions = (
+                        False if "vision" in model_name else True
+                    )
 
-    if vulnera.llm.model.startswith(
-        "gpt-3.5-turbo"
-    ) or vulnera.llm.model.startswith("openai/gpt-3.5-turbo"):
-        if vulnera.llm.context_window is None:
-            vulnera.llm.context_window = 16000
-        if vulnera.llm.max_tokens is None:
-            vulnera.llm.max_tokens = 4096
-        if vulnera.llm.supports_functions is None:
-            vulnera.llm.supports_functions = True
+            if model_name.startswith("gpt-3.5-turbo") or model_name.startswith("openai/gpt-3.5-turbo"):
+                if vulnera.llm.context_window is None:
+                    vulnera.llm.context_window = 16000
+                if vulnera.llm.max_tokens is None:
+                    vulnera.llm.max_tokens = 4096
+                if vulnera.llm.supports_functions is None:
+                    vulnera.llm.supports_functions = True
+    except Exception as e:
+        print(f"WARNING: Error configuring model settings: {e}", file=sys.stderr)
 
     ### Check for update
 
@@ -529,66 +593,123 @@ Use """ to write multi-line messages.
         pass
 
     if vulnera.llm.api_base:
-        if (
-            not vulnera.llm.model.lower().startswith("openai/")
-            and not vulnera.llm.model.lower().startswith("azure/")
-            and not vulnera.llm.model.lower().startswith("ollama")
-            and not vulnera.llm.model.lower().startswith("jan")
-            and not vulnera.llm.model.lower().startswith("local")
-        ):
-            vulnera.llm.model = "openai/" + vulnera.llm.model
-        elif vulnera.llm.model.lower().startswith("jan/"):
-            # Strip jan/ from the model name
-            vulnera.llm.model = vulnera.llm.model[4:]
+        try:
+            model_name = getattr(vulnera.llm, 'model', None)
+            
+            if model_name is None:
+                print("WARNING: Cannot apply api_base prefix - model is None", file=sys.stderr)
+            elif (
+                not model_name.lower().startswith("openai/")
+                and not model_name.lower().startswith("azure/")
+                and not model_name.lower().startswith("ollama")
+                and not model_name.lower().startswith("jan")
+                and not model_name.lower().startswith("local")
+            ):
+                vulnera.llm.model = "openai/" + model_name
+            elif model_name.lower().startswith("jan/"):
+                # Strip jan/ from the model name
+                vulnera.llm.model = model_name[4:]
+        except Exception as e:
+            print(f"WARNING: Error applying api_base configuration: {e}", file=sys.stderr)
 
     # If --conversations is used, run conversation_navigator
     if args.conversations:
         conversation_navigator(vulnera)
         return
 
-    if vulnera.llm.model in [
-        "claude-3.5",
-        "claude-3-5",
-        "claude-3.5-sonnet",
-        "claude-3-5-sonnet",
-    ]:
-        vulnera.llm.model = "claude-3-5-sonnet-20240620"
+    # Handle model name aliases
+    try:
+        if vulnera.llm.model in [
+            "claude-3.5",
+            "claude-3-5",
+            "claude-3.5-sonnet",
+            "claude-3-5-sonnet",
+        ]:
+            vulnera.llm.model = "claude-3-5-sonnet-20240620"
+    except Exception as e:
+        print(f"WARNING: Error handling model name aliases: {e}", file=sys.stderr)
 
     if not args.server:
         # This SHOULD RUN WHEN THE SERVER STARTS. But it can't rn because
         # if you don't have an API key, a prompt shows up, breaking the whole thing.
-        validate_llm_settings(
-            vulnera
-        )  # This should actually just run vulnera.llm.load() once that's == to validate_llm_settings
+        try:
+            validate_llm_settings(vulnera)
+        except Exception as e:
+            print(f"ERROR: LLM validation failed: {e}", file=sys.stderr)
+            raise
 
     if args.server:
-        vulnera.server.run()
+        try:
+            if not hasattr(vulnera, 'server') or vulnera.server is None:
+                raise ValueError("Server not available - vulnera.server is None")
+            vulnera.server.run()
+        except Exception as e:
+            print(f"ERROR: Failed to start server: {e}", file=sys.stderr)
+            raise
         return
 
-    vulnera.in_terminal_interface = True
+    try:
+        vulnera.in_terminal_interface = True
+    except Exception as e:
+        print(f"WARNING: Could not set in_terminal_interface: {e}", file=sys.stderr)
 
-    contribute_conversation_launch_logic(vulnera)
+    try:
+        contribute_conversation_launch_logic(vulnera)
+    except Exception as e:
+        print(f"ERROR: Failed to process conversation logic: {e}", file=sys.stderr)
+        raise
 
     # Standard in mode
-    if args.stdin:
-        stdin_input = input()
-        vulnera.plain_text_display = True
-        vulnera.chat(stdin_input)
-    else:
-        vulnera.chat()
+    try:
+        if args.stdin:
+            stdin_input = input()
+            vulnera.plain_text_display = True
+            vulnera.chat(stdin_input)
+        else:
+            vulnera.chat()
+    except Exception as e:
+        print(f"ERROR: Chat session failed: {e}", file=sys.stderr)
+        raise
 
 
 def set_attributes(args, arguments):
+    """Set attributes on the vulnera object based on parsed command-line arguments.
+    
+    This function includes validation to ensure attributes exist before setting them.
+    """
     for argument_name, argument_value in vars(args).items():
         if argument_value is not None:
             if argument_dictionary := get_argument_dictionary(arguments, argument_name):
                 if "attribute" in argument_dictionary:
                     attr_dict = argument_dictionary["attribute"]
-                    setattr(attr_dict["object"], attr_dict["attr_name"], argument_value)
-
-                    if args.verbose:
+                    target_object = attr_dict["object"]
+                    attr_name = attr_dict["attr_name"]
+                    
+                    # Validate target object exists
+                    if target_object is None:
                         print(
-                            f"Setting attribute {attr_dict['attr_name']} on {attr_dict['object'].__class__.__name__.lower()} to '{argument_value}'..."
+                            f"WARNING: Cannot set attribute '{attr_name}' - target object is None",
+                            file=sys.stderr
+                        )
+                        continue
+                    
+                    # Validate attribute can be set
+                    try:
+                        setattr(target_object, attr_name, argument_value)
+                        
+                        if args.verbose:
+                            print(
+                                f"Setting attribute {attr_name} on {target_object.__class__.__name__.lower()} to '{argument_value}'..."
+                            )
+                    except AttributeError as e:
+                        print(
+                            f"WARNING: Failed to set attribute '{attr_name}' on {target_object.__class__.__name__}: {e}",
+                            file=sys.stderr
+                        )
+                    except Exception as e:
+                        print(
+                            f"ERROR: Unexpected error setting attribute '{attr_name}': {e}",
+                            file=sys.stderr
                         )
 
 
@@ -606,27 +727,80 @@ def get_argument_dictionary(arguments: list[dict], key: str) -> dict:
 
 
 def main():
-    from vulnera import vulnera
-
+    """Main entry point for the terminal interface.
+    
+    This function initializes the OpenVulnera instance and starts the terminal interface,
+    with comprehensive error handling and validation.
+    """
+    vulnera = None
+    
     try:
-        start_terminal_interface(vulnera)
-    except KeyboardInterrupt:
+        # Initialize the OpenVulnera instance
+        from vulnera import init_vulnera
+        
         try:
-            vulnera.computer.terminate()
+            vulnera = init_vulnera()
+        except Exception as e:
+            print(f"FATAL ERROR: Failed to initialize OpenVulnera: {e}", file=sys.stderr)
+            print("\nDebugging info:", file=sys.stderr)
+            print(f"  Error type: {type(e).__name__}", file=sys.stderr)
+            import traceback
+            traceback.print_exc(file=sys.stderr)
+            return 1
+        
+        # Validate that vulnera instance was created successfully
+        if vulnera is None:
+            print("FATAL ERROR: OpenVulnera initialization failed - instance is None", file=sys.stderr)
+            return 1
+        
+        # Validate required attributes exist
+        if not hasattr(vulnera, 'llm') or vulnera.llm is None:
+            print("FATAL ERROR: OpenVulnera initialization failed - llm attribute is missing or None", file=sys.stderr)
+            return 1
+        
+        if not hasattr(vulnera, 'computer') or vulnera.computer is None:
+            print("FATAL ERROR: OpenVulnera initialization failed - computer attribute is missing or None", file=sys.stderr)
+            return 1
+        
+        # Start the terminal interface
+        start_terminal_interface(vulnera)
+        
+    except KeyboardInterrupt:
+        print("\n\nKeyboard interrupt received.", file=sys.stderr)
+        try:
+            if vulnera is not None and hasattr(vulnera, 'computer') and vulnera.computer is not None:
+                vulnera.computer.terminate()
 
-            if not vulnera.offline and not vulnera.disable_telemetry:
-                # Quick feedback flow: if user opted into contributing, forward messages (no prompts).
-                if vulnera.contribute_conversation and vulnera.messages != []:
-                    conversation_id = (
-                        vulnera.conversation_id
-                        if hasattr(vulnera, "conversation_id")
-                        else None
-                    )
-                    contribute_conversations(
-                        [vulnera.messages], None, conversation_id
-                    )
+                if (not vulnera.offline and not vulnera.disable_telemetry):
+                    # Quick feedback flow: if user opted into contributing, forward messages (no prompts).
+                    if vulnera.contribute_conversation and vulnera.messages != []:
+                        conversation_id = (
+                            vulnera.conversation_id
+                            if hasattr(vulnera, "conversation_id")
+                            else None
+                        )
+                        contribute_conversations(
+                            [vulnera.messages], None, conversation_id
+                        )
 
         except KeyboardInterrupt:
             pass
+        except Exception as cleanup_error:
+            print(f"Error during cleanup: {cleanup_error}", file=sys.stderr)
+    except Exception as e:
+        print(f"ERROR: An unexpected error occurred: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        try:
+            if vulnera is not None and hasattr(vulnera, 'computer') and vulnera.computer is not None:
+                vulnera.computer.terminate()
+        except Exception as cleanup_error:
+            print(f"Error during cleanup: {cleanup_error}", file=sys.stderr)
+        return 1
     finally:
-        vulnera.computer.terminate()
+        # Ensure proper cleanup regardless of how we exit
+        if vulnera is not None and hasattr(vulnera, 'computer') and vulnera.computer is not None:
+            try:
+                vulnera.computer.terminate()
+            except Exception as cleanup_error:
+                print(f"Error during final cleanup: {cleanup_error}", file=sys.stderr)
