@@ -15,10 +15,13 @@ def respond(vulnera):
     """
     Yields chunks.
     Responds until it decides not to run any more code or say anything else.
+    Enhanced with anti-hallucination mechanisms and improved autonomous execution.
     """
 
     last_unsupported_code = ""
     insert_loop_message = False
+    failed_attempts = {}  # Track failed commands to prevent infinite loops
+    max_retries_per_command = 3
 
     while True:
         ## RENDER SYSTEM MESSAGE ##
@@ -41,13 +44,6 @@ def respond(vulnera):
                     system_message + "\n\n" + vulnera.computer.system_message
                 )
 
-        # Storing the messages so they're accessible in the vulnera's computer
-        # no... this is a huge time sink.....
-        # if vulnera.sync_computer:
-        #     output = vulnera.computer.run(
-        #         "python", f"messages={vulnera.messages}"
-        #     )
-
         ## Rendering ↓
         rendered_system_message = render_message(vulnera, system_message)
         ## Rendering ↑
@@ -67,10 +63,10 @@ def respond(vulnera):
                 {
                     "role": "user",
                     "type": "message",
-                    "content": loop_message,
+                    "content": vulnera.loop_message,
                 }
             )
-            # Yield two newlines to separate the LLMs reply from previous messages.
+            # Yield two newlines to separate the LLMs reply from previous messages
             yield {"role": "assistant", "type": "message", "content": "\n\n"}
             insert_loop_message = False
 
@@ -80,9 +76,7 @@ def respond(vulnera):
             len(vulnera.messages) > 0
         ), "User message was not passed in. You need to pass in at least one message."
 
-        if (
-            vulnera.messages[-1]["type"] != "code"
-        ):  # If it is, we should run the code (we do below)
+        if vulnera.messages[-1]["type"] != "code":
             try:
                 for chunk in vulnera.llm.run(messages_for_llm):
                     yield {"role": "assistant", **chunk}
@@ -103,40 +97,24 @@ def respond(vulnera):
                 error_message = str(e).lower()
                 if (
                     vulnera.offline == False
-                    and ("auth" in error_message or
-                         "api key" in error_message)
+                    and ("auth" in error_message or "api key" in error_message)
                 ):
-                    # Provide extra information on how to change API keys, if
-                    # we encounter that error (Many people writing GitHub
-                    # issues were struggling with this)
                     output = traceback.format_exc()
                     raise Exception(
-                        f"{output}\n\nThere might be an issue with your API key(s).\n\nTo reset your API key (we'll use OPENAI_API_KEY for this example, but you may need to reset your ANTHROPIC_API_KEY, HUGGINGFACE_API_KEY, etc):\n        Mac/Linux: 'export OPENAI_API_KEY=your-key-here'. Update your ~/.zshrc on MacOS or ~/.bashrc on Linux with the new key if it has already been persisted there.,\n        Windows: 'setx OPENAI_API_KEY your-key-here' then restart terminal.\n\n"
+                        f"{output}\n\nThere might be an issue with your API key(s).\n\nTo reset your API key (we'll use OPENAI_API_KEY for this example, but you may need to reset your ANTHROPIC_API_KEY, etc):\n        Mac/Linux: 'export OPENAI_API_KEY=your-key-here',\n        Windows: 'setx OPENAI_API_KEY your-key-here' then restart terminal.\n\n"
                     )
                 elif (
                     isinstance(e, litellm.exceptions.RateLimitError)
-                    and ("exceeded" in str(e).lower() or
-                         "insufficient_quota" in str(e).lower())
+                    and ("exceeded" in str(e).lower() or "insufficient_quota" in str(e).lower())
                 ):
                     display_markdown_message(
-                        f""" > You ran out of current quota for OpenAI's API, please check your plan and billing details. You can either wait for the quota to reset or upgrade your plan.
-
-                        To check your current usage and billing details, visit the [OpenAI billing page](https://platform.openai.com/settings/organization/billing/overview).
-
-                        You can also use `vulnera --max_budget [higher USD amount]` to set a budget for your sessions.
+                        f""" > Rate limit or quota exceeded. Please check your API plan and billing details.
                         """
                     )
-
-                elif (
-                    vulnera.offline == False and "not have access" in str(e).lower()
-                ):
-                    # The previous behavior offered a hosted 'i' model provided by
-                    # the original Open Interpreter project. That hosted model and
-                    # associated flows have been removed during rebranding.
-                    # Instead, surface a helpful error asking the user to verify
-                    # their model name and API credentials.
+                    raise
+                elif vulnera.offline == False and "not have access" in str(e).lower():
                     raise Exception(
-                        f"The model '{vulnera.llm.model}' is invalid or you do not have access. Please verify the model name and your API credentials for the provider you are using."
+                        f"The model '{vulnera.llm.model}' is invalid or you do not have access. Please verify the model name and your API credentials."
                     )
                 elif vulnera.offline and not vulnera.os:
                     raise
@@ -154,56 +132,45 @@ def respond(vulnera):
                 language = vulnera.messages[-1]["format"].lower().strip()
                 code = vulnera.messages[-1]["content"]
 
+                # Normalize code block formatting
                 if code.startswith("`\n"):
                     code = code[2:].strip()
                     if vulnera.verbose:
                         print("Removing `\n")
-                    vulnera.messages[-1]["content"] = code  # So the LLM can see it.
+                    vulnera.messages[-1]["content"] = code
 
-                # A common hallucination
+                # ANTI-HALLUCINATION: Detect and fix common LLM hallucinations
+
+                # Hallucination 1: functions.execute() wrapper
                 if code.startswith("functions.execute("):
                     edited_code = code.replace("functions.execute(", "").rstrip(")")
                     try:
                         code_dict = json.loads(edited_code)
                         language = code_dict.get("language", language)
                         code = code_dict.get("code", code)
-                        vulnera.messages[-1][
-                            "content"
-                        ] = code  # So the LLM can see it.
-                        vulnera.messages[-1][
-                            "format"
-                        ] = language  # So the LLM can see it.
+                        vulnera.messages[-1]["content"] = code
+                        vulnera.messages[-1]["format"] = language
                     except:
                         pass
 
-                # print(code)
-                # print("---")
-                # time.sleep(2)
-
+                # Hallucination 2: Double execute suffix
                 if code.strip().endswith("executeexecute"):
                     code = code.replace("executeexecute", "")
-                    try:
-                        vulnera.messages[-1][
-                            "content"
-                        ] = code  # So the LLM can see it.
-                    except:
-                        pass
+                    vulnera.messages[-1]["content"] = code
 
+                # Hallucination 3: JSON-formatted code block
                 if code.replace("\n", "").replace(" ", "").startswith('{"language":'):
                     try:
                         code_dict = json.loads(code)
                         if set(code_dict.keys()) == {"language", "code"}:
                             language = code_dict["language"]
                             code = code_dict["code"]
-                            vulnera.messages[-1][
-                                "content"
-                            ] = code  # So the LLM can see it.
-                            vulnera.messages[-1][
-                                "format"
-                            ] = language  # So the LLM can see it.
+                            vulnera.messages[-1]["content"] = code
+                            vulnera.messages[-1]["format"] = language
                     except:
                         pass
 
+                # Hallucination 4: Unquoted JSON keys
                 if code.replace("\n", "").replace(" ", "").startswith("{language:"):
                     try:
                         code = code.replace("language: ", '"language": ').replace(
@@ -213,22 +180,13 @@ def respond(vulnera):
                         if set(code_dict.keys()) == {"language", "code"}:
                             language = code_dict["language"]
                             code = code_dict["code"]
-                            vulnera.messages[-1][
-                                "content"
-                            ] = code  # So the LLM can see it.
-                            vulnera.messages[-1][
-                                "format"
-                            ] = language  # So the LLM can see it.
+                            vulnera.messages[-1]["content"] = code
+                            vulnera.messages[-1]["format"] = language
                     except:
                         pass
 
-                if (
-                    language == "text"
-                    or language == "markdown"
-                    or language == "plaintext"
-                ):
-                    # It does this sometimes just to take notes. Let it, it's useful.
-                    # In the future we should probably not detect this behavior as code at all.
+                # Hallucination 5: Text/markdown code blocks that should be messages
+                if language in ["text", "markdown", "plaintext"]:
                     real_content = vulnera.messages[-1]["content"]
                     vulnera.messages[-1] = {
                         "role": "assistant",
@@ -237,9 +195,23 @@ def respond(vulnera):
                     }
                     continue
 
-                # Is this language enabled/supported?
+                # LOOP PREVENTION: Check if this exact command has failed multiple times
+                code_hash = hash(code + language)
+                if code_hash in failed_attempts:
+                    if failed_attempts[code_hash] >= max_retries_per_command:
+                        yield {
+                            "role": "computer",
+                            "type": "console",
+                            "format": "output",
+                            "content": f"ERROR: This command has failed {max_retries_per_command} times. Switching to alternative approach is required. Do not retry the same command.",
+                        }
+                        # Reset counter and break to force new approach
+                        failed_attempts[code_hash] = 0
+                        continue
+
+                # ENVIRONMENT VALIDATION: Verify language is supported
                 if vulnera.computer.terminal.get_language(language) is None:
-                    output = f"`{language}` disabled or not supported."
+                    output = f"`{language}` is not supported in this environment.\n\nAvailable languages: {', '.join([lang.name for lang in vulnera.computer.terminal.languages])}\n\nPlease use a supported language."
 
                     yield {
                         "role": "computer",
@@ -248,24 +220,24 @@ def respond(vulnera):
                         "content": output,
                     }
 
-                    # Let the response continue so it can deal with the unsupported code in another way. Also prevent looping on the same piece of code.
+                    # Prevent infinite loop on unsupported language
                     if code != last_unsupported_code:
                         last_unsupported_code = code
                         continue
                     else:
                         break
 
-                # Is there any code at all?
+                # VALIDATION: Check for empty code blocks
                 if code.strip() == "":
                     yield {
                         "role": "computer",
                         "type": "console",
                         "format": "output",
-                        "content": "Code block was empty. Please try again, be sure to write code before executing.",
+                        "content": "ERROR: Code block is empty. You must provide actual code to execute.",
                     }
                     continue
 
-                # Yield a message, such that the user can stop code execution if they want to
+                # Yield confirmation message for code execution
                 try:
                     yield {
                         "role": "computer",
@@ -278,16 +250,12 @@ def respond(vulnera):
                         },
                     }
                 except GeneratorExit:
-                    # The user might exit here.
-                    # We need to tell python what we (the generator) should do if they exit
                     break
 
-                # They may have edited the code! Grab it again
-                code = [m for m in vulnera.messages if m["type"] == "code"][-1][
-                    "content"
-                ]
+                # User may have edited the code - grab latest version
+                code = [m for m in vulnera.messages if m["type"] == "code"][-1]["content"]
 
-                # don't let it import computer — we handle that!
+                # Computer API import handling (prevent duplicate imports)
                 if vulnera.computer.import_computer_api and language == "python":
                     code = code.replace("import computer\n", "pass\n")
                     code = re.sub(
@@ -302,7 +270,8 @@ def respond(vulnera):
                         code,
                     )
                     code = re.sub(r"import computer\.\w+\n", "pass\n", code)
-                    # If it does this it sees the screenshot twice (which is expected jupyter behavior)
+                    
+                    # Prevent double screenshot display
                     if any(
                         code.strip().split("\n")[-1].startswith(text)
                         for text in [
@@ -314,13 +283,13 @@ def respond(vulnera):
                     ):
                         code = code + "\npass"
 
-                # sync up some things (is this how we want to do this?)
+                # Sync settings with computer
                 vulnera.computer.verbose = vulnera.verbose
                 vulnera.computer.debug = vulnera.debug
                 vulnera.computer.emit_images = vulnera.llm.supports_vision
                 vulnera.computer.max_output = vulnera.max_output
 
-                # sync up the vulnera's computer with your computer
+                # Sync computer state (if enabled)
                 try:
                     if vulnera.sync_computer and language == "python":
                         computer_dict = vulnera.computer.to_dict()
@@ -335,29 +304,58 @@ def respond(vulnera):
                     if vulnera.debug:
                         raise
                     print(str(e))
-                    print("Failed to sync iComputer with your Computer. Continuing...")
+                    print("Failed to sync computer state. Continuing...")
 
-                ## ↓ CODE IS RUN HERE
+                ## ↓ CODE EXECUTION HAPPENS HERE ↓
 
-                for line in vulnera.computer.run(language, code, stream=True):
-                    yield {"role": "computer", **line}
+                execution_successful = True
+                execution_output = []
 
-                ## ↑ CODE IS RUN HERE
+                try:
+                    for line in vulnera.computer.run(language, code, stream=True):
+                        execution_output.append(line)
+                        yield {"role": "computer", **line}
+                        
+                        # Check for error indicators in output
+                        if line.get("format") == "output":
+                            content = line.get("content", "").lower()
+                            if any(err in content for err in ["error", "exception", "traceback", "failed", "not found"]):
+                                execution_successful = False
 
-                # sync up your computer with the vulnera's computer
+                except Exception as exec_error:
+                    execution_successful = False
+                    yield {
+                        "role": "computer",
+                        "type": "console",
+                        "format": "output",
+                        "content": f"EXECUTION ERROR: {str(exec_error)}\n{traceback.format_exc()}",
+                    }
+
+                ## ↑ CODE EXECUTION COMPLETE ↑
+
+                # Track failed attempts for loop prevention
+                if not execution_successful:
+                    if code_hash not in failed_attempts:
+                        failed_attempts[code_hash] = 0
+                    failed_attempts[code_hash] += 1
+                else:
+                    # Reset counter on success
+                    if code_hash in failed_attempts:
+                        failed_attempts[code_hash] = 0
+
+                # Sync computer state back (if enabled)
                 try:
                     if vulnera.sync_computer and language == "python":
-                        # sync up the vulnera's computer with your computer
                         result = vulnera.computer.run(
                             "python",
                             """
-                            import json
-                            computer_dict = computer.to_dict()
-                            if '_hashes' in computer_dict:
-                                computer_dict.pop('_hashes')
-                            if "system_message" in computer_dict:
-                                computer_dict.pop("system_message")
-                            print(json.dumps(computer_dict))
+import json
+computer_dict = computer.to_dict()
+if '_hashes' in computer_dict:
+    computer_dict.pop('_hashes')
+if "system_message" in computer_dict:
+    computer_dict.pop("system_message")
+print(json.dumps(computer_dict))
                             """,
                         )
                         result = result[-1]["content"]
@@ -368,10 +366,9 @@ def respond(vulnera):
                     if vulnera.debug:
                         raise
                     print(str(e))
-                    print("Failed to sync your Computer with iComputer. Continuing.")
+                    print("Failed to sync computer state back. Continuing.")
 
-                # yield final "active_line" message, as if to say, no more code is running. unhighlight active lines
-                # (is this a good idea? is this our responsibility? i think so — we're saying what line of code is running! ...?)
+                # Signal code execution complete
                 yield {
                     "role": "computer",
                     "type": "console",
@@ -380,27 +377,35 @@ def respond(vulnera):
                 }
 
             except KeyboardInterrupt:
-                break  # It's fine.
-            except:
+                break
+            except Exception as e:
                 yield {
                     "role": "computer",
                     "type": "console",
                     "format": "output",
-                    "content": traceback.format_exc(),
+                    "content": f"CRITICAL ERROR:\n{traceback.format_exc()}",
                 }
+                # Track critical errors
+                code_hash = hash(code + language)
+                if code_hash not in failed_attempts:
+                    failed_attempts[code_hash] = 0
+                failed_attempts[code_hash] += 1
 
         else:
-            ## LOOP MESSAGE
-            # This makes it utter specific phrases if it doesn't want to be told to "Proceed."
+            ## AUTONOMOUS LOOP MESSAGE HANDLING
 
             loop_message = vulnera.loop_message
+            
+            # OS mode enhancement
             if vulnera.os:
                 loop_message = loop_message.replace(
                     "If the entire task I asked for is done,",
                     "If the entire task I asked for is done, take a screenshot to verify it's complete, or if you've already taken a screenshot and verified it's complete,",
                 )
+            
             loop_breakers = vulnera.loop_breakers
 
+            # Determine if we should continue looping
             if (
                 vulnera.loop
                 and vulnera.messages
@@ -410,13 +415,14 @@ def respond(vulnera):
                     for task_status in loop_breakers
                 )
             ):
-                # Remove past loop_message messages
+                # Remove past loop messages to avoid clutter
                 vulnera.messages = [
                     message
                     for message in vulnera.messages
                     if message.get("content", "") != loop_message
                 ]
-                # Combine adjacent assistant messages, so hopefully it learns to just keep going!
+                
+                # Combine adjacent assistant messages for continuity
                 combined_messages = []
                 for message in vulnera.messages:
                     if (
@@ -431,12 +437,11 @@ def respond(vulnera):
                         combined_messages.append(message)
                 vulnera.messages = combined_messages
 
-                # Send model the loop_message:
+                # Insert loop continuation message
                 insert_loop_message = True
-
                 continue
 
-            # Doesn't want to run code. We're done!
+            # Task complete or loop breaker encountered
             break
 
     return
