@@ -54,12 +54,31 @@ if "--os" in sys.argv:
     run_async_main()
     exit()
 
-from .core.async_core import AsyncInterpreter
-from .core.computer.terminal.base_language import BaseLanguage
-from .core.core import OpenVulnera
+try:
+    from .core.async_core import AsyncInterpreter
+    from .core.computer.terminal.base_language import BaseLanguage
+    from .core.core import OpenVulnera
+except Exception:
+    AsyncInterpreter = None
+    BaseLanguage = None
+    OpenVulnera = None
 
-vulnera = OpenVulnera()
-computer = vulnera.computer
+# Lazy-initialized globals to avoid import-time side effects (network calls, etc.)
+vulnera = None
+computer = None
+
+def init_vulnera():
+    """Initialize and return the global `vulnera` instance.
+
+    Use this to create the runtime instance when needed instead of at import time.
+    """
+    global vulnera, computer
+    if vulnera is None:
+        if OpenVulnera is None:
+            raise RuntimeError("OpenVulnera class is unavailable")
+        vulnera = OpenVulnera()
+        computer = vulnera.computer
+    return vulnera
 
 #     ____                      ____      __                            __
 #    / __ \____  ___  ____     /  _/___  / /____  _________  ________  / /____  _____
