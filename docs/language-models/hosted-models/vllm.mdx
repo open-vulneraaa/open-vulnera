@@ -1,0 +1,44 @@
+---
+title: vLLM
+---
+
+To use Open Vulnera with vLLM, you will need to:
+
+1. `pip install vllm`
+2. Set the api_base flag:
+
+<CodeGroup>
+
+```bash Terminal
+vulnera --api_base <https://your-hosted-vllm-server>
+```
+
+```python Python
+from vulnera import vulnera
+
+vulnera.llm.api_base = "<https://your-hosted-vllm-server>"
+vulnera.chat()
+```
+
+</CodeGroup>
+
+3. Set the `model` flag:
+
+<CodeGroup>
+
+```bash Terminal
+vulnera --model vllm/<vllm-model>
+```
+
+```python Python
+from vulnera import vulnera
+
+vulnera.llm.model = "vllm/<vllm-model>"
+vulnera.chat()
+```
+
+</CodeGroup>
+
+# Supported Models
+
+All models from VLLM should be supported

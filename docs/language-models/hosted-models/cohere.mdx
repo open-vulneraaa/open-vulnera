@@ -1,0 +1,54 @@
+---
+title: Cohere
+---
+
+To use Open Vulnera with a model from Cohere, set the `model` flag:
+
+<CodeGroup>
+
+```bash Terminal
+vulnera --model command-nightly
+```
+
+```python Python
+from vulnera import vulnera
+
+vulnera.llm.model = "command-nightly"
+vulnera.chat()
+```
+
+</CodeGroup>
+
+# Supported Models
+
+We support any model on [Cohere's models page:](https://www.cohere.ai/models)
+
+<CodeGroup>
+
+```bash Terminal
+vulnera --model command
+vulnera --model command-light
+vulnera --model command-medium
+vulnera --model command-medium-beta
+vulnera --model command-xlarge-beta
+vulnera --model command-nightly
+```
+
+```python Python
+vulnera.llm.model = "command"
+vulnera.llm.model = "command-light"
+vulnera.llm.model = "command-medium"
+vulnera.llm.model = "command-medium-beta"
+vulnera.llm.model = "command-xlarge-beta"
+vulnera.llm.model = "command-nightly"
+```
+
+</CodeGroup>
+
+# Required Environment Variables
+
+Set the following environment variables [(click here to learn how)](https://chat.openai.com/share/1062cdd8-62a1-4aa8-8ec9-eca45645971a) to use these models.
+
+| Environment Variable  | Description  | Where to Find  |
+| --------------------- | ------------ | -------------- |
+| `COHERE_API_KEY`       | The API key for authenticating to Cohere's services. | [Cohere Account Page](https://app.cohere.ai/login) |

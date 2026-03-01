@@ -1,0 +1,50 @@
+Open Vulnera License v1.0
+Copyright (c) 2026 Free Software Foundation, Inc. All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use,
+copy, modify, and distribute the Software for personal, educational, or
+internal business purposes, subject to the following conditions:
+
+1. ATTRIBUTION REQUIRED
+   All copies, forks, or derivative works must retain this license file,
+   the original copyright notice, and clear visible credit to the original
+   author(s) of Open Vulnera in any distributed form or public deployment.
+
+2. PROHIBITED — SELLING
+   You may NOT sell, sublicense, or commercially distribute this Software
+   or any derivative of it, in whole or in part, without explicit written
+   permission and valid credentials issued by the original author(s).
+
+3. PROHIBITED — OBFUSCATION
+   You may NOT obfuscate, minify for concealment, encrypt, or otherwise
+   deliberately obscure the source code of this Software or any derivative
+   with the intent to hide its origin, logic, or authorship.
+
+4. PROHIBITED — THEFT / UNCREDENTIALED REDISTRIBUTION
+   You may NOT redistribute, repackage, rebrand, or publish this Software
+   under a different name or identity without explicit written credentials
+   granted by the original author(s). Presenting this Software as your own
+   original work is strictly prohibited.
+
+5. CREDENTIALS
+   "Credentials" means a signed written agreement or token issued directly
+   by the original author(s) of Open Vulnera granting the specific rights
+   requested. Credentials are non-transferable unless explicitly stated.
+
+6. CYBERSECURITY USE
+   This Software is intended for lawful cybersecurity research, penetration
+   testing with authorization, vulnerability analysis, and defensive tooling.
+   Any use of this Software for unauthorized access, illegal activity, or
+   malicious purposes is strictly prohibited and void of any license grant.
+
+7. NO WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM,
+   DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF THIS SOFTWARE.
+
+8. TERMINATION
+   Any breach of the above conditions immediately and automatically terminates
+   your rights under this license without notice.
+
+For permissions, credentials, or inquiries contact the original author(s).

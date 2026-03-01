@@ -1,0 +1,35 @@
+---
+title: "Best Practices"
+---
+
+Most settings — like model architecture and GPU offloading — can be adjusted via your LLM providers like [LM Studio.](https://lmstudio.ai/)
+
+**However, `max_tokens` and `context_window` should be set via Open Vulnera.**
+
+For local mode, smaller context windows will use less RAM, so we recommend trying a much shorter window (~1000) if it's is failing or if it's slow.
+
+<CodeGroup>
+
+```bash Terminal
+vulnera --local --max_tokens 1000 --context_window 3000
+```
+
+```python Python
+from vulnera import vulnera
+
+vulnera.offline = True # Disables online features like Open Procedures
+vulnera.llm.model = "openai/x" # Tells Open Vulnera to send messages in OpenAI's format
+vulnera.llm.api_key = "fake_key" # LiteLLM, which we use to talk to LM Studio, requires this
+vulnera.llm.api_base = "http://localhost:1234/v1" # Point this at any OpenAI compatible server
+
+vulnera.llm.max_tokens = 1000
+vulnera.llm.context_window = 3000
+
+vulnera.chat()
+```
+
+</CodeGroup>
+
+<br />
+
+<Info>Make sure `max_tokens` is less than `context_window`.</Info>
