@@ -184,7 +184,7 @@ class OpenVulnera:
                 except Exception as e:
                     # Telemetry should NEVER crash the chat
                     if self.debug:
-                        print(f"Telemetry error (non-fatal): {e}")
+                        print(f"[DEBUG] Telemetry error (non-fatal): {e}")
                     pass
 
             if not blocking:
