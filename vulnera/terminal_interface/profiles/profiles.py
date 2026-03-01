@@ -29,7 +29,7 @@ try:
     from importlib.metadata import version as _pkg_version
     OV_VERSION = _pkg_version("open-vulnera")
 except Exception:
-    OV_VERSION = "0.0.3"
+    OV_VERSION = "0.0.6"
 
 
 def profile(vulnera, filename_or_url):
