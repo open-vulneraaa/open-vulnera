@@ -1,6 +1,8 @@
 """
-This file defines the Vulnera class.
+This file defines the OpenVulnera class.
 It's the main file. `from vulnera import vulnera` will import an instance of this class.
+
+Enhanced with improved error handling, telemetry resilience, and autonomous operation support.
 """
 import json
 import os
@@ -23,7 +25,7 @@ from .utils.truncate_output import truncate_output
 
 class OpenVulnera:
     """
-    This class (one instance is called an `vulnera`) is the "grand central station" of this project.
+    This class (one instance is called a `vulnera`) is the "grand central station" of this project.
 
     Its responsibilities are to:
 
@@ -37,6 +39,8 @@ class OpenVulnera:
     The above process should repeat—going back and forth between the language model and the computer— until:
 
     6. Decide when the process is finished based on the language model's response.
+    
+    Enhanced with autonomous operation support and improved error resilience.
     """
 
     def __init__(
@@ -50,7 +54,7 @@ class OpenVulnera:
         safe_mode="off",
         shrink_images=True,
         loop=False,
-        loop_message="""Proceed. You CAN run code on my machine. If the entire task I asked for is done, say exactly 'The task is done.' If you need some specific information (like username or password) say EXACTLY 'Please provide more information.' If it's impossible, say 'The task is impossible.' (If I haven't provided a task, say exactly 'Let me know what you'd like to do next.') Otherwise keep going.""",
+        loop_message="""Proceed autonomously. You CAN run code on my machine. If the entire task I asked for is done, say exactly 'The task is done.' If you need specific information (like credentials or configuration details) say EXACTLY 'Please provide more information.' If it's impossible after trying multiple approaches, say 'The task is impossible.' (If I haven't provided a task, say exactly 'Let me know what you'd like to do next.') Otherwise continue executing.""",
         loop_breakers=[
             "The task is done.",
             "The task is impossible.",
@@ -70,7 +74,7 @@ class OpenVulnera:
         user_message_template="{content}",
         always_apply_user_message_template=False,
         code_output_template="Code output: {content}\n\nWhat does this output mean / what's next (if anything, or are we done)?",
-        empty_code_output_template="The code above was executed on my machine. It produced no text output. what's next (if anything, or are we done?)",
+        empty_code_output_template="The code above was executed on my machine. It produced no text output. What's next (if anything, or are we done)?",
         code_output_sender="user",
         computer=None,
         sync_computer=False,
@@ -99,7 +103,7 @@ class OpenVulnera:
         self.multi_line = multi_line
         self.contribute_conversation = contribute_conversation
         self.plain_text_display = plain_text_display
-        self.highlight_active_line = True  # additional setting to toggle active line highlighting. Defaults to True
+        self.highlight_active_line = True
 
         # Loop messages
         self.loop = loop
@@ -164,30 +168,36 @@ class OpenVulnera:
     def chat(self, message=None, display=True, stream=False, blocking=True):
         try:
             self.responding = True
+            
+            # ENHANCED: Telemetry with error protection
             if self.anonymous_telemetry:
-                message_type = type(
-                    message
-                ).__name__  # Only send message type, no content
-                send_telemetry(
-                    "started_chat",
-                    properties={
-                        "in_terminal_interface": self.in_terminal_interface,
-                        "message_type": message_type,
-                        "os_mode": self.os,
-                    },
-                )
+                try:
+                    message_type = type(message).__name__
+                    send_telemetry(
+                        "started_chat",
+                        properties={
+                            "in_terminal_interface": self.in_terminal_interface,
+                            "message_type": message_type,
+                            "os_mode": self.os,
+                        },
+                    )
+                except Exception as e:
+                    # Telemetry should NEVER crash the chat
+                    if self.debug:
+                        print(f"Telemetry error (non-fatal): {e}")
+                    pass
 
             if not blocking:
                 chat_thread = threading.Thread(
                     target=self.chat, args=(message, display, stream, True)
-                )  # True as in blocking = True
+                )
                 chat_thread.start()
                 return
 
             if stream:
                 return self._streaming_chat(message=message, display=display)
 
-            # If stream=False, *pull* from the stream.
+            # If stream=False, *pull* from the stream
             for _ in self._streaming_chat(message=message, display=display):
                 pass
 
@@ -200,94 +210,90 @@ class OpenVulnera:
             # It's fine
         except Exception as e:
             self.responding = False
+            
+            # ENHANCED: Protected telemetry on error
             if self.anonymous_telemetry:
-                message_type = type(message).__name__
-                send_telemetry(
-                    "errored",
-                    properties={
-                        "error": str(e),
-                        "in_terminal_interface": self.in_terminal_interface,
-                        "message_type": message_type,
-                        "os_mode": self.os,
-                    },
-                )
+                try:
+                    message_type = type(message).__name__
+                    send_telemetry(
+                        "errored",
+                        properties={
+                            "error": str(e),
+                            "in_terminal_interface": self.in_terminal_interface,
+                            "message_type": message_type,
+                            "os_mode": self.os,
+                        },
+                    )
+                except:
+                    # Silently fail telemetry on error
+                    pass
 
             raise
 
     def _streaming_chat(self, message=None, display=True):
-        # Sometimes a little more code -> a much better experience!
-        # Display mode actually runs vulnera.chat(display=False, stream=True) from within the terminal_interface.
-        # wraps the vanilla .chat(display=False) generator in a display.
-        # Quite different from the plain generator stuff. So redirect to that
+        # Display mode runs vulnera.chat(display=False, stream=True) from within terminal_interface
         if display:
             yield from terminal_interface(self, message)
             return
 
-        # One-off message
+        # One-off message handling
         if message or message == "":
-            ## We support multiple formats for the incoming message:
-            # Dict (these are passed directly in)
+            # Support multiple message formats
             if isinstance(message, dict):
                 if "role" not in message:
                     message["role"] = "user"
                 self.messages.append(message)
-            # String (we construct a user message dict)
             elif isinstance(message, str):
                 self.messages.append(
                     {"role": "user", "type": "message", "content": message}
                 )
-            # List (this is like the OpenAI API)
             elif isinstance(message, list):
                 self.messages = message
 
-            # Now that the user's messages have been added, we set last_messages_count.
-            # This way we will only return the messages after what they added.
+            # Set last_messages_count to return only new messages
             self.last_messages_count = len(self.messages)
 
-            # DISABLED because I think we should just not transmit images to non-multimodal models?
-            # REENABLE this when multimodal becomes more common:
-
-            # Make sure we're using a model that can handle this
-            # if not self.llm.supports_vision:
-            #     for message in self.messages:
-            #         if message["type"] == "image":
-            #             raise Exception(
-            #                 "Use a multimodal model and set `vulnera.llm.supports_vision` to True to handle image messages."
-            #             )
-
-            # This is where it all happens!
+            # Execute response generation
             yield from self._respond_and_store()
 
-            # Save conversation if we've turned conversation_history on
+            # ENHANCED: Protected conversation history saving
             if self.conversation_history:
-                # If it's the first message, set the conversation name
-                if not self.conversation_filename:
-                    first_few_words_list = self.messages[0]["content"][:25].split(" ")
-                    if (
-                        len(first_few_words_list) >= 2
-                    ):  # for languages like English with blank between words
-                        first_few_words = "_".join(first_few_words_list[:-1])
-                    else:  # for languages like Chinese without blank between words
-                        first_few_words = self.messages[0]["content"][:15]
-                    for char in '<>:"/\\|?*!\n':  # Invalid characters for filenames
-                        first_few_words = first_few_words.replace(char, "")
+                try:
+                    # Generate filename on first message
+                    if not self.conversation_filename:
+                        first_few_words_list = self.messages[0]["content"][:25].split(" ")
+                        if len(first_few_words_list) >= 2:
+                            first_few_words = "_".join(first_few_words_list[:-1])
+                        else:
+                            first_few_words = self.messages[0]["content"][:15]
+                        
+                        # Remove invalid filename characters
+                        for char in '<>:"/\\|?*!\n':
+                            first_few_words = first_few_words.replace(char, "")
 
-                    date = datetime.now().strftime("%B_%d_%Y_%H-%M-%S")
-                    self.conversation_filename = (
-                        "__".join([first_few_words, date]) + ".json"
-                    )
+                        date = datetime.now().strftime("%B_%d_%Y_%H-%M-%S")
+                        self.conversation_filename = (
+                            "__".join([first_few_words, date]) + ".json"
+                        )
 
-                # Check if the directory exists, if not, create it
-                if not os.path.exists(self.conversation_history_path):
-                    os.makedirs(self.conversation_history_path)
-                # Write or overwrite the file
-                with open(
-                    os.path.join(
-                        self.conversation_history_path, self.conversation_filename
-                    ),
-                    "w",
-                ) as f:
-                    json.dump(self.messages, f)
+                    # Create directory if it doesn't exist
+                    if not os.path.exists(self.conversation_history_path):
+                        os.makedirs(self.conversation_history_path)
+                    
+                    # Save conversation
+                    with open(
+                        os.path.join(
+                            self.conversation_history_path, self.conversation_filename
+                        ),
+                        "w",
+                    ) as f:
+                        json.dump(self.messages, f)
+                        
+                except Exception as e:
+                    # Don't crash if conversation saving fails
+                    if self.debug:
+                        print(f"[DEBUG] Failed to save conversation: {e}")
+                    pass
             return
 
         raise Exception(
@@ -296,8 +302,9 @@ class OpenVulnera:
 
     def _respond_and_store(self):
         """
-        Pulls from the respond stream, adding delimiters. Some things, like active_line, console, confirmation... these act specially.
-        Also assembles new messages and adds them to `self.messages`.
+        Pulls from the respond stream, adding delimiters.
+        Assembles new messages and adds them to `self.messages`.
+        Enhanced with better error handling.
         """
         self.verbose = False
 
@@ -316,20 +323,19 @@ class OpenVulnera:
 
         try:
             for chunk in respond(self):
-                # For async usage
+                # Async stop event check
                 if hasattr(self, "stop_event") and self.stop_event.is_set():
                     print("Open Vulnera stopping.")
                     break
 
-                if chunk["content"] == "":
+                if chunk.get("content") == "":
                     continue
 
-                # If active_line is None, we finished running code.
+                # Code execution completion handling
                 if (
                     chunk.get("format") == "active_line"
                     and chunk.get("content", "") == None
                 ):
-                    # If output wasn't yet produced, add an empty output
                     if self.messages[-1]["role"] != "computer":
                         self.messages.append(
                             {
@@ -340,9 +346,8 @@ class OpenVulnera:
                             }
                         )
 
-                # Handle the special "confirmation" chunk, which neither triggers a flag or creates a message
+                # Handle confirmation chunks
                 if chunk["type"] == "confirmation":
-                    # Emit a end flag for the last message type, and reset last_flag_base
                     if last_flag_base:
                         yield {**last_flag_base, "end": True}
                         last_flag_base = None
@@ -350,19 +355,9 @@ class OpenVulnera:
                     if self.auto_run == False:
                         yield chunk
 
-                    # We want to append this now, so even if content is never filled, we know that the execution didn't produce output.
-                    # ... rethink this though.
-                    # self.messages.append(
-                    #     {
-                    #         "role": "computer",
-                    #         "type": "console",
-                    #         "format": "output",
-                    #         "content": "",
-                    #     }
-                    # )
                     continue
 
-                # Check if the chunk's role, type, and format (if present) match the last_flag_base
+                # Check if chunk matches last_flag_base
                 if (
                     last_flag_base
                     and "role" in chunk
@@ -377,8 +372,7 @@ class OpenVulnera:
                         )
                     )
                 ):
-                    # If they match, append the chunk's content to the current message's content
-                    # (Except active_line, which shouldn't be stored)
+                    # Append content to current message
                     if not is_ephemeral(chunk):
                         if any(
                             [
@@ -394,52 +388,54 @@ class OpenVulnera:
                         else:
                             self.messages[-1]["content"] += chunk["content"]
                 else:
-                    # If they don't match, yield a end message for the last message type and a start message for the new one
+                    # Start new message type
                     if last_flag_base:
                         yield {**last_flag_base, "end": True}
 
                     last_flag_base = {"role": chunk["role"], "type": chunk["type"]}
 
-                    # Don't add format to type: "console" flags, to accommodate active_line AND output formats
+                    # Don't add format to console type flags
                     if "format" in chunk and chunk["type"] != "console":
                         last_flag_base["format"] = chunk["format"]
 
                     yield {**last_flag_base, "start": True}
 
-                    # Add the chunk as a new message
+                    # Add chunk as new message
                     if not is_ephemeral(chunk):
                         self.messages.append(chunk)
 
-                # Yield the chunk itself
+                # Yield the chunk
                 yield chunk
 
-                # Truncate output if it's console output
+                # Truncate console output if needed
                 if chunk["type"] == "console" and chunk["format"] == "output":
                     self.messages[-1]["content"] = truncate_output(
                         self.messages[-1]["content"],
                         self.max_output,
-                        add_scrollbars=self.computer.import_computer_api,  # I consider scrollbars to be a computer API thing
+                        add_scrollbars=self.computer.import_computer_api,
                     )
 
-            # Yield a final end flag
+            # Yield final end flag
             if last_flag_base:
                 yield {**last_flag_base, "end": True}
+                
         except GeneratorExit:
-            raise  # gotta pass this up!
+            raise
 
     def reset(self):
-        self.computer.terminate()  # Terminates all languages
-        self.computer._has_imported_computer_api = False  # Flag reset
+        """Reset the agent state."""
+        self.computer.terminate()
+        self.computer._has_imported_computer_api = False
         self.messages = []
         self.last_messages_count = 0
 
     def display_message(self, markdown):
-        # This is just handy for start_script in profiles.
+        """Display markdown message to user."""
         if self.plain_text_display:
             print(markdown)
         else:
             display_markdown_message(markdown)
 
     def get_ov_dir(self):
-        # Again, just handy for start_script in profiles.
+        """Get Open Vulnera directory."""
         return ov_dir
