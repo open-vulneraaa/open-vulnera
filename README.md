@@ -396,4 +396,4 @@ Please see our [contributing guidelines](https://github.com/open-vulnera/open-vu
 **Note**: This software is not affiliated with OpenAI.
 
 
-**Status**: Active Development<br>**Last Update**: March 2, 2026
+**Status**: Active Development<br>**Last Update**: March 21, 2026
