@@ -405,16 +405,10 @@ Use """ to write multi-line messages.
                 nargs=arg.get("nargs"),
             )
 
-    args, unknown_args = parser.parse_known_args()
+    # Add positional argument for message
+    parser.add_argument('message', nargs='*', help='The message to send to the AI')
 
-    # handle unknown arguments
-    if unknown_args:
-        print(f"\nUnrecognized argument(s): {unknown_args}")
-        parser.print_usage()
-        print(
-            "For detailed documentation of supported arguments, please visit: https://github.com/open-vulnera/open-vulnera/tree/master/docs/settings/all-settings"
-        )
-        sys.exit(1)
+    args = parser.parse_args()
 
     if args.profiles:
         open_storage_dir("profiles")
@@ -665,6 +659,9 @@ Use """ to write multi-line messages.
             stdin_input = input()
             vulnera.plain_text_display = True
             vulnera.chat(stdin_input)
+        elif args.message:
+            message = " ".join(args.message)
+            vulnera.chat(message)
         else:
             vulnera.chat()
     except Exception as e:
