@@ -661,7 +661,10 @@ Use """ to write multi-line messages.
             vulnera.chat(stdin_input)
         elif args.message:
             message = " ".join(args.message)
-            vulnera.chat(message)
+            # Keep the same flow as interactive input and the existing "i shortcut" path.
+            # This prevents a different context pipeline for -y path and avoids system prompt being accidentally exposed.
+            vulnera.messages.append({"role": "user", "type": "message", "content": message})
+            vulnera.chat()
         else:
             vulnera.chat()
     except Exception as e:
