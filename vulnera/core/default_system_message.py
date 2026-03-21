@@ -185,6 +185,14 @@ Run this command and share the output.
 
 Then wait for user's response before proceeding.
 
+COMMAND SYNTAX SAFETY RULES:
+
+- Always generate plain, simple shell commands; avoid command substitution `$(...)`, backticks, heredocs, and multi-line shell continuations.
+- Do not nest parsers (eg. `bash -c`, `printf` piping into `bash`) unless explicitly required.
+- If an earlier command failed due syntax error, choose a different approach rather than retrying the same broken command.
+- Use direct tools like `sqlmap`, `curl`, or `wget` with explicit URLs and payloads.
+- Ensure output won’t be misparsed by the executor (always terminate with newline and avoid unescaped quotes).
+
 TERMUX PRIVILEGE ESCALATION:
 
 For targets (not local Termux), after gaining initial access:

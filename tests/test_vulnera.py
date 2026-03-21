@@ -91,6 +91,16 @@ def test_hallucinations():
             break
 
 
+def test_shell_preprocess_blocks_complex_syntax():
+    from vulnera.core.computer.terminal.languages.shell import preprocess_shell
+
+    unsafe_code = "curl $(printf 'http://example.com')"
+    preprocessed = preprocess_shell(unsafe_code)
+
+    assert "Command blocked" in preprocessed
+    assert "##end_of_execution##" in preprocessed
+
+
 def run_auth_server():
     os.environ["INTERPRETER_REQUIRE_ACKNOWLEDGE"] = "True"
     os.environ["INTERPRETER_API_KEY"] = "testing"

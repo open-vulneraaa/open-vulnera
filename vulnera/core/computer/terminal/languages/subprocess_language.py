@@ -181,6 +181,19 @@ class SubprocessLanguage(BaseLanguage):
                     )
                     time.sleep(0.1)
                     self.done.set()
+                elif is_error_stream and re.search(
+                    r"syntax error|unexpected end of file|illegal option|command not found",
+                    line,
+                    re.IGNORECASE,
+                ):
+                    self.output_queue.put(
+                        {
+                            "type": "console",
+                            "format": "output",
+                            "content": "[ERROR] Command syntax or execution failure detected; stopping current command execution.",
+                        }
+                    )
+                    self.done.set()
                 else:
                     self.output_queue.put(
                         {"type": "console", "format": "output", "content": line}

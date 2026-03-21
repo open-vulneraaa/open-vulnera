@@ -36,12 +36,36 @@ class Shell(SubprocessLanguage):
         return "##end_of_execution##" in line
 
 
+def is_simple_shell_command(code):
+    """Reject complex command expansion patterns that tend to produce syntax hallucinations."""
+    forbidden_patterns = [
+        r"\$\(",
+        r"`",  # backticks
+        r"<<",  # heredocs
+        r"\|\|",
+        r"&&",
+        r"\\$",  # line continuation
+    ]
+    for pat in forbidden_patterns:
+        if re.search(pat, code):
+            return False
+    return True
+
+
 def preprocess_shell(code):
     """
     Add active line markers
     Wrap in a try except (trap in shell)
     Add end of execution marker
     """
+
+    # Protect from hallucinated complex payloads
+    if not is_simple_shell_command(code):
+        return (
+            'echo "[ERROR] Command blocked: complex or unsafe shell syntax detected, '
+            'use straightforward curl/sqlmap syntax instead."; '
+            'echo "##end_of_execution##"'
+        )
 
     # Add commands that tell us what the active line is
     # if it's multiline, just skip this. soon we should make it work with multiline
