@@ -377,6 +377,11 @@ print(json.dumps(computer_dict))
                 }
 
             except KeyboardInterrupt:
+                # Stop any running computer operations
+                try:
+                    vulnera.computer.stop()
+                except:
+                    pass  # Ignore errors during emergency stop
                 break
             except Exception as e:
                 yield {

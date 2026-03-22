@@ -101,6 +101,26 @@ def test_shell_preprocess_blocks_complex_syntax():
     assert "##end_of_execution##" in preprocessed
 
 
+def test_subprocess_language_timeout():
+    """Test that SubprocessLanguage properly handles timeouts and shutdown."""
+    from vulnera.core.computer.terminal.languages.subprocess_language import SubprocessLanguage
+
+    lang = SubprocessLanguage()
+    lang.command_timeout = 1  # Very short timeout for testing
+
+    # This should timeout
+    start_time = time.time()
+    chunks = list(lang.run("sleep 10"))  # Command that would take 10 seconds
+    end_time = time.time()
+
+    # Should have timed out within a few seconds, not 10
+    assert end_time - start_time < 5, f"Took too long: {end_time - start_time}s"
+
+    # Should contain timeout message
+    output = "".join(chunk.get("content", "") for chunk in chunks if chunk.get("format") == "output")
+    assert "TIMEOUT" in output or "timeout" in output.lower()
+
+
 def run_auth_server():
     os.environ["INTERPRETER_REQUIRE_ACKNOWLEDGE"] = "True"
     os.environ["INTERPRETER_API_KEY"] = "testing"
