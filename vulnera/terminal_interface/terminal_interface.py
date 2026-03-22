@@ -351,6 +351,9 @@ def terminal_interface(vulnera, message):
 
                     if "content" in chunk:
                         active_block.code += chunk["content"]
+                        # Refresh immediately when code is added for real-time visibility
+                        if active_block:
+                            active_block.refresh(cursor=render_cursor)
 
                 # Computer can display visual types to user,
                 # Which sometimes creates more computer output (e.g. HTML errors, eventually)
@@ -435,8 +438,18 @@ def terminal_interface(vulnera, message):
                             vulnera.max_output,
                             add_scrollbars=False,
                         )  # ^ Notice that this doesn't add the "scrollbars" line, which I think is fine
+                        
+                        # CRITICAL FIX: Refresh display immediately for real-time streaming output
+                        # This prevents output from being stuck below screen and makes long-running
+                        # commands (nmap, sqlmap, etc.) show progress in real-time
+                        if active_block:
+                            active_block.refresh(cursor=False)
+                    
                     if "format" in chunk and chunk["format"] == "active_line":
                         active_block.active_line = chunk["content"]
+                        # Also refresh when active line changes for progress indication
+                        if active_block:
+                            active_block.refresh(cursor=True)
 
                         # Display action notifications if we're in OS mode
                         if vulnera.os and active_block.active_line != None:

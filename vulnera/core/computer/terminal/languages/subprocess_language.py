@@ -122,7 +122,9 @@ class SubprocessLanguage(BaseLanguage):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=0,
+i                # Use line buffering (bufsize=1) for real-time output streaming
+                # This ensures output appears immediately instead of being buffered
+                bufsize=1,
                 universal_newlines=True,
                 env=my_env,
                 encoding="utf-8",
@@ -217,7 +219,7 @@ class SubprocessLanguage(BaseLanguage):
                     # Check if command completed
                     if self.done.is_set():
                         # Drain remaining output
-                        time.sleep(0.1)  # Brief pause for final output
+                        time.sleep(0.05)  # Brief pause for final output (reduced from 0.1)
                         while not self.output_queue.empty():
                             try:
                                 output = self.output_queue.get_nowait()
@@ -226,8 +228,9 @@ class SubprocessLanguage(BaseLanguage):
                                 break
                         break
 
-                    # Small sleep to prevent busy waiting
-                    time.sleep(0.05)
+                    # Smaller sleep for more responsive output (critical for long-running commands)
+                    # This allows nmap, sqlmap output to stream in real-time instead of buffering
+                    time.sleep(0.01)  # Reduced from 0.05 for faster output streaming
 
                 # Check if we were shutdown
                 if self._shutdown_event.is_set():
@@ -270,21 +273,12 @@ class SubprocessLanguage(BaseLanguage):
                     return
 
     def handle_stream_output(self, stream, is_error_stream):
-        """Handle streaming output from subprocess with proper shutdown handling."""
+        """Handle streaming output from subprocess with proper shutdown handling and real-time line output."""
         try:
             while not self._shutdown_event.is_set():
-                # Use non-blocking read with timeout
-                import select
-                if hasattr(select, 'select') and hasattr(stream, 'fileno'):
-                    try:
-                        ready, _, _ = select.select([stream], [], [], 0.1)
-                        if not ready:
-                            continue
-                    except (OSError, ValueError):
-                        # select not available or stream not selectable
-                        pass
-
                 try:
+                    # Use readline with non-blocking approach
+                    # This ensures each line of output is immediately queued without waiting for buffer
                     line = stream.readline()
                     if not line:  # EOF
                         break
@@ -329,7 +323,7 @@ class SubprocessLanguage(BaseLanguage):
                                 "content": "KeyboardInterrupt",
                             }
                         )
-                        time.sleep(0.1)
+                        time.sleep(0.05)
                         self.done.set()
                         break
                     elif is_error_stream and re.search(
@@ -347,6 +341,7 @@ class SubprocessLanguage(BaseLanguage):
                         self.done.set()
                         break
                     else:
+                        # Queue output immediately for real-time display
                         self.output_queue.put(
                             {"type": "console", "format": "output", "content": line}
                         )
