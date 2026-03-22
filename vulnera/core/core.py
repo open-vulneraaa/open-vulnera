@@ -22,6 +22,8 @@ from .llm.llm import Llm
 from .respond import respond
 from .utils.telemetry import send_telemetry
 from .utils.truncate_output import truncate_output
+from .utils.session_manager import get_session_manager
+from .utils.rag_manager import get_rag_manager
 
 
 class OpenVulnera:
@@ -131,6 +133,10 @@ class OpenVulnera:
 
         self.computer.import_skills = import_skills
 
+        # Session and retrieval (RAG) managers
+        self.session_manager = get_session_manager()
+        self.rag_manager = get_rag_manager()
+
         # LLM
         self.llm = Llm(self) if llm is None else llm
 
@@ -193,7 +199,10 @@ class OpenVulnera:
             self.conversation_state["attack_phase"] = "exploit"
         elif any(k in content_lower for k in ["privilege", "post exploit", "escalate", "root"]):
             self.conversation_state["attack_phase"] = "post_exploit"
-
+        # Mirror to session manager to persist state and keep global sync
+        if hasattr(self, "session_manager") and self.session_manager:
+            self.session_manager.state.update(self.conversation_state)
+            self.session_manager.save_state()
     def get_conversation_state_summary(self):
         state = self.conversation_state
         pieces = [

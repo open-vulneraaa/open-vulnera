@@ -101,6 +101,43 @@ def test_shell_preprocess_blocks_complex_syntax():
     assert "##end_of_execution##" in preprocessed
 
 
+def test_session_manager_state_transitions(tmp_path):
+    from vulnera.core.utils.session_manager import SessionManager
+
+    session_id = f"test_{int(time.time())}"
+    manager = SessionManager(session_id=session_id)
+
+    # Default state
+    state = manager.get_state()
+    assert state["current_target"] is None
+    assert state["attack_phase"] is None
+
+    manager.update_from_user("Recon scan of test.com")
+    state = manager.get_state()
+    assert state["current_target"] == "test.com"
+    assert state["attack_phase"] == "recon"
+
+    manager.add_command("nmap -sn test.com")
+    manager.add_output("Nmap scan report")
+    state = manager.get_state()
+    assert "nmap -sn test.com" in state["previous_commands"]
+    assert "Nmap scan report" in state["previous_outputs"]
+
+
+def test_rag_manager_retrieval(tmp_path):
+    from vulnera.core.utils.rag_manager import RagManager
+
+    session_id = f"test_{int(time.time())}"
+    manager = RagManager(session_id=session_id)
+
+    manager.add_entry(target="test.com", phase="recon", command="nmap test.com", output="open ports")
+    manager.add_entry(target="test.com", phase="exploit", command="sqlmap", output="vulnerable")
+
+    hits = manager.retrieve(target="test.com", phase="recon", query="nmap")
+    assert len(hits) >= 1
+    assert hits[0]["phase"] == "recon"
+
+
 def test_subprocess_language_timeout():
     """Test that SubprocessLanguage properly handles fixed 5-minute timeout and shutdown."""
     from vulnera.core.computer.terminal.languages.subprocess_language import SubprocessLanguage

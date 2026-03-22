@@ -180,6 +180,24 @@ def respond(vulnera):
                     except:
                         pass
 
+                # Hallucination 5: functions.execute style wrappers
+                if code.strip().startswith("functions.execute(") and code.strip().endswith(")"):
+                    try:
+                        payload = code.strip()[len("functions.execute("):-1].strip()
+                        payload = payload.strip()
+                        # Support JSON-like passing
+                        if payload.endswith(","):
+                            payload = payload[:-1]
+                        if payload.startswith("{"):
+                            parsed = json.loads(payload)
+                            if "language" in parsed and "code" in parsed:
+                                language = parsed.get("language", language)
+                                code = parsed.get("code", code)
+                                vulnera.messages[-1]["content"] = code
+                                vulnera.messages[-1]["format"] = language
+                    except Exception:
+                        pass
+
                 # Hallucination 5: Text/markdown code blocks that should be messages
                 if language in ["text", "markdown", "plaintext"]:
                     real_content = vulnera.messages[-1]["content"]

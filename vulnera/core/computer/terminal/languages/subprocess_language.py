@@ -12,7 +12,12 @@ from ..base_language import BaseLanguage
 
 class SubprocessLanguage(BaseLanguage):
     def __init__(self):
-        self.start_cmd = []
+        # Default start command for plain subprocess environments
+        if os.name == "nt":
+            self.start_cmd = ["cmd.exe"]
+        else:
+            self.start_cmd = [os.environ.get("SHELL", "bash")]
+
         self.process = None
         self.verbose = False
         self.output_queue = queue.Queue()
