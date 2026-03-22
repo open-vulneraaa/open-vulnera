@@ -11,6 +11,15 @@
   Based on <strong>AIDE CLI</strong>.
 </p>
 
+<p align="center">
+  <a href="https://pypi.org/project/open-vulnera/">
+    <img src="https://badge.fury.io/py/open-vulnera.svg" alt="PyPI version">
+  </a>
+  <a href="https://pypi.org/project/open-vulnera/">
+    <img src="https://img.shields.io/pypi/dm/open-vulnera.svg" alt="PyPI downloads">
+  </a>
+</p>
+
 ---
 
 ## Overview
