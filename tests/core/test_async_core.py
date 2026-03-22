@@ -4,7 +4,7 @@ import pytest
 pytest.importorskip("fastapi")
 from unittest import TestCase, mock
 
-from vulnera.core.async_core import AsyncInterpreter, Server
+from vulnera.core.async_core import AsyncVulnera, Server
 
 
 class TestServerConstruction(TestCase):
@@ -20,7 +20,7 @@ class TestServerConstruction(TestCase):
         b) no HOST and PORT are set.
         """
         with mock.patch.dict(os.environ, {}):
-            s = Server(AsyncInterpreter())
+            s = Server(AsyncVulnera())
             self.assertEqual(s.host, Server.DEFAULT_HOST)
             self.assertEqual(s.port, Server.DEFAULT_PORT)
 
@@ -34,9 +34,9 @@ class TestServerConstruction(TestCase):
 
         with mock.patch.dict(
             os.environ,
-            {"INTERPRETER_HOST": "this-is-supes-fake", "INTERPRETER_PORT": "9876"},
+            {"VULNERA_HOST": "this-is-supes-fake", "VULNERA_PORT": "9876"},
         ):
-            sboth = Server(AsyncInterpreter(), host, port)
+            sboth = Server(AsyncVulnera(), host, port)
             self.assertEqual(sboth.host, host)
             self.assertEqual(sboth.port, port)
 
@@ -50,8 +50,8 @@ class TestServerConstruction(TestCase):
 
         with mock.patch.dict(
             os.environ,
-            {"INTERPRETER_HOST": fake_host, "INTERPRETER_PORT": str(fake_port)},
+            {"VULNERA_HOST": fake_host, "VULNERA_PORT": str(fake_port)},
         ):
-            s = Server(AsyncInterpreter())
+            s = Server(AsyncVulnera())
             self.assertEqual(s.host, fake_host)
             self.assertEqual(s.port, fake_port)

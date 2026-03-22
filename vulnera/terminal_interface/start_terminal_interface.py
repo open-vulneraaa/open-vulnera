@@ -35,18 +35,18 @@ def start_terminal_interface(vulnera):
 
     # Instead use an async vulnera, which has a server. Set settings on that
     if "--server" in sys.argv:
-        from vulnera import AsyncInterpreter
+        from vulnera import AsyncVulnera
 
         try:
-            vulnera = AsyncInterpreter()
+            vulnera = AsyncVulnera()
             if vulnera is None:
-                raise ValueError("AsyncInterpreter initialization returned None")
+                raise ValueError("AsyncVulnera initialization returned None")
             if not hasattr(vulnera, 'llm') or vulnera.llm is None:
-                raise ValueError("AsyncInterpreter.llm is missing or None")
+                raise ValueError("AsyncVulnera.llm is missing or None")
             if not hasattr(vulnera, 'computer') or vulnera.computer is None:
-                raise ValueError("AsyncInterpreter.computer is missing or None")
+                raise ValueError("AsyncVulnera.computer is missing or None")
         except Exception as e:
-            print(f"ERROR: Failed to initialize AsyncInterpreter for --server mode: {e}", file=sys.stderr)
+            print(f"ERROR: Failed to initialize AsyncVulnera for --server mode: {e}", file=sys.stderr)
             raise
 
     arguments = [

@@ -55,11 +55,11 @@ if "--os" in sys.argv:
     exit()
 
 try:
-    from .core.async_core import AsyncInterpreter
+    from .core.async_core import AsyncVulnera
     from .core.computer.terminal.base_language import BaseLanguage
     from .core.core import OpenVulnera
 except Exception:
-    AsyncInterpreter = None
+    AsyncVulnera = None
     BaseLanguage = None
     OpenVulnera = None
 

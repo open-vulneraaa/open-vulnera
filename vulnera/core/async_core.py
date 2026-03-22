@@ -18,9 +18,40 @@ from .core import OpenVulnera
 
 last_start_time = 0
 
+
+def get_env_var(name, default=None):
+    value = os.getenv(f"VULNERA_{name}", None)
+    if value is None:
+        value = os.getenv(f"VULNERA_{name}", default)
+    return value if value is not None else default
+
+# Default placeholders (for environments without server dependencies)
+APIRouter = None
+FastAPI = None
+File = None
+Form = None
+HTTPException = None
+Request = None
+UploadFile = None
+WebSocket = None
+JSONResponse = None
+PlainTextResponse = None
+StreamingResponse = None
+HTTP_403_FORBIDDEN = None
+uvicorn = None
+janus = None
+
 try:
     import janus
+except ImportError:
+    janus = None
+
+try:
     import uvicorn
+except ImportError:
+    uvicorn = None
+
+try:
     from fastapi import (
         APIRouter,
         FastAPI,
@@ -32,16 +63,29 @@ try:
         WebSocket,
     )
     from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
+except ImportError:
+    APIRouter = None
+    FastAPI = None
+    File = None
+    Form = None
+    HTTPException = None
+    Request = None
+    UploadFile = None
+    WebSocket = None
+    JSONResponse = None
+    PlainTextResponse = None
+    StreamingResponse = None
+
+try:
     from starlette.status import HTTP_403_FORBIDDEN
-except:
-    # Server dependencies are not required by the main package.
-    pass
+except ImportError:
+    HTTP_403_FORBIDDEN = None
 
 
 complete_message = {"role": "server", "type": "status", "content": "complete"}
 
 
-class AsyncInterpreter(OpenVulnera):
+class AsyncVulnera(OpenVulnera):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -49,11 +93,11 @@ class AsyncInterpreter(OpenVulnera):
         self.stop_event = threading.Event()
         self.output_queue = None
         self.unsent_messages = deque()
-        self.id = os.getenv("INTERPRETER_ID", datetime.now().timestamp())
+        self.id = os.getenv("VULNERA_ID", datetime.now().timestamp())
         self.print = False  # Will print output
 
         self.require_acknowledge = (
-            os.getenv("INTERPRETER_REQUIRE_ACKNOWLEDGE", "False").lower() == "true"
+            get_env_var("REQUIRE_ACKNOWLEDGE", "False").lower() == "true"
         )
         self.acknowledged_outputs = []
 
@@ -283,7 +327,7 @@ def authenticate_function(key):
     Returns True if the key is valid, False otherwise.
     """
     # Fetch the API key from the environment variables. If it's not set, return True.
-    api_key = os.getenv("INTERPRETER_API_KEY", None)
+    api_key = get_env_var("API_KEY", None)
 
     # If the API key is not set in the environment variables, return True.
     # Otherwise, check if the provided key matches the fetched API key.
@@ -294,7 +338,7 @@ def authenticate_function(key):
         return key == api_key
 
 
-def create_router(async_interpreter):
+def create_router(async_vulnera):
     router = APIRouter()
 
     @router.get("/heartbeat")
@@ -320,9 +364,9 @@ def create_router(async_interpreter):
                 <div id="messages"></div>
                 <script>
                     var ws = new WebSocket("ws://"""
-            + async_interpreter.server.host
+            + async_vulnera.server.host
             + ":"
-            + str(async_interpreter.server.port)
+            + str(async_vulnera.server.port)
             + """/");
                     var lastMessageElement = null;
 
@@ -341,7 +385,7 @@ def create_router(async_interpreter):
                         ws.send(JSON.stringify(acknowledge_message));
 
                         """
-                if async_interpreter.require_acknowledge
+                if async_vulnera.require_acknowledge
                 else ""
             )
             + """
@@ -450,12 +494,12 @@ def create_router(async_interpreter):
 
                         if (
                             not authenticated
-                            and os.getenv("INTERPRETER_REQUIRE_AUTH") != "False"
+                            and get_env_var("REQUIRE_AUTH", "True") != "False"
                         ):
                             if "text" in data:
                                 data = json.loads(data["text"])
                                 if "auth" in data:
-                                    if async_interpreter.server.authenticate(
+                                    if async_vulnera.server.authenticate(
                                         data["auth"]
                                     ):
                                         authenticated = True
@@ -470,16 +514,16 @@ def create_router(async_interpreter):
                             if "text" in data:
                                 data = json.loads(data["text"])
                                 if (
-                                    async_interpreter.require_acknowledge
+                                    async_vulnera.require_acknowledge
                                     and "ack" in data
                                 ):
-                                    async_interpreter.acknowledged_outputs.append(
+                                    async_vulnera.acknowledged_outputs.append(
                                         data["ack"]
                                     )
                                     continue
                             elif "bytes" in data:
                                 data = data["bytes"]
-                            await async_interpreter.input(data)
+                            await async_vulnera.input(data)
                         elif data.get("type") == "websocket.disconnect":
                             print("Client wants to disconnect, that's fine..")
                             return
@@ -511,22 +555,22 @@ def create_router(async_interpreter):
                         return
                     try:
                         # First, try to send any unsent messages
-                        while async_interpreter.unsent_messages:
-                            output = async_interpreter.unsent_messages[0]
-                            if async_interpreter.debug:
+                        while async_vulnera.unsent_messages:
+                            output = async_vulnera.unsent_messages[0]
+                            if async_vulnera.debug:
                                 print("This was unsent, sending it again:", output)
 
                             success = await send_message(output)
                             if success:
-                                async_interpreter.unsent_messages.popleft()
+                                async_vulnera.unsent_messages.popleft()
 
                         # If we've sent all unsent messages, get a new output
-                        if not async_interpreter.unsent_messages:
-                            output = await async_interpreter.output()
+                        if not async_vulnera.unsent_messages:
+                            output = await async_vulnera.output()
                             success = await send_message(output)
                             if not success:
-                                async_interpreter.unsent_messages.append(output)
-                                if async_interpreter.debug:
+                                async_vulnera.unsent_messages.append(output)
+                                if async_vulnera.debug:
                                     print(
                                         f"Added message to unsent_messages queue after failed attempts: {output}"
                                     )
@@ -538,8 +582,8 @@ def create_router(async_interpreter):
                             "type": "error",
                             "content": error,
                         }
-                        async_interpreter.unsent_messages.append(error_message)
-                        async_interpreter.unsent_messages.append(complete_message)
+                        async_vulnera.unsent_messages.append(error_message)
+                        async_vulnera.unsent_messages.append(complete_message)
                         print("\n\n--- ERROR (will be sent when possible): ---\n\n")
                         print(error)
                         print(
@@ -553,7 +597,7 @@ def create_router(async_interpreter):
                     id = shortuuid.uuid()
                     if (
                         isinstance(output, dict)
-                        and async_interpreter.require_acknowledge
+                        and async_vulnera.require_acknowledge
                     ):
                         output["id"] = id
 
@@ -677,7 +721,7 @@ def create_router(async_interpreter):
         else:
             return json.dumps({"error": "Setting not found"}), 404
 
-    if os.getenv("INTERPRETER_INSECURE_ROUTES", "").lower() == "true":
+    if get_env_var("INSECURE_ROUTES", "").lower() == "true":
 
         @router.post("/run")
         async def run_code(payload: Dict[str, Any]):
@@ -975,8 +1019,8 @@ class Server:
                 )
 
         self.app.include_router(router)
-        h = host or os.getenv("INTERPRETER_HOST", Server.DEFAULT_HOST)
-        p = port or int(os.getenv("INTERPRETER_PORT", Server.DEFAULT_PORT))
+        h = host or get_env_var("HOST", Server.DEFAULT_HOST)
+        p = port or int(get_env_var("PORT", Server.DEFAULT_PORT))
         self.config = uvicorn.Config(app=self.app, host=h, port=p)
         self.uvicorn_server = uvicorn.Server(self.config)
 

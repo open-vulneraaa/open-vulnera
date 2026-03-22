@@ -305,7 +305,7 @@ def run_tool_calling_llm(llm, request_params):
                     if llm.vulnera.verbose:
                         print("Arguments not a dict.")
 
-    if os.getenv("INTERPRETER_REQUIRE_AUTHENTICATION", "False").lower() == "true":
+    if os.getenv("VULNERA_REQUIRE_AUTHENTICATION", "False").lower() == "true":
         print("function_call_detected", function_call_detected)
         print("accumulated_review", accumulated_review)
         if function_call_detected and not accumulated_review:

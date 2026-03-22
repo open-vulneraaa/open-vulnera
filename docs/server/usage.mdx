@@ -13,9 +13,9 @@ vulnera --server
 To start the server from within a Python script:
 
 ```python
-from vulnera import AsyncInterpreter
+from vulnera import AsyncVulnera
 
-async_interpreter = AsyncInterpreter()
+async_interpreter = AsyncVulnera()
 async_interpreter.server.run(port=8000)  # Default port is 8000, but you can customize it
 ```
 
@@ -298,10 +298,10 @@ Or in Python:
 
 ```python
 import os
-os.environ["INTERPRETER_REQUIRE_ACKNOWLEDGE"] = "True"
+os.environ["VULNERA_REQUIRE_ACKNOWLEDGE"] = "True"
 
-from vulnera import AsyncInterpreter
-async_interpreter = AsyncInterpreter()
+from vulnera import AsyncVulnera
+async_interpreter = AsyncVulnera()
 async_interpreter.server.run()
 ```
 
@@ -312,11 +312,11 @@ The FastAPI app is exposed at `async_interpreter.server.app`. This allows you to
 Example of adding a custom route and hosting with Uvicorn:
 
 ```python
-from vulnera import AsyncInterpreter
+from vulnera import AsyncVulnera
 from fastapi import FastAPI
 import uvicorn
 
-async_interpreter = AsyncInterpreter()
+async_interpreter = AsyncVulnera()
 app = async_interpreter.server.app
 
 @app.get("/custom")
@@ -332,7 +332,7 @@ if __name__ == "__main__":
 1. Always handle the .complete" status message to ensure your client knows when the server has finished processing.
 2. If `auto_run` is set to `False`, remember to send the "go".command to execute code blocks and continue the interaction.
 3. Implement proper error handling in your client to manage potential connection issues, unexpected server responses, or server-sent error messages.
-4. Use the AsyncInterpreter class when working with the server in Python to ensure.compatibility with asynchronous operations.
+4. Use the AsyncVulnera class when working with the server in Python to ensure compatibility with asynchronous operations.
 5. Pay attention to the code execution review messages for important safety and operational information.
 6. Utilize the multi-part user message structure for.complex inputs, including file paths and images.
 7. When sending file paths or image paths, ensure they are accessible to the server.

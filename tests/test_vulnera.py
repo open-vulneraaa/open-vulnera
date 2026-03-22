@@ -15,7 +15,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test")
 import pytest
 
 #####
-from vulnera import AsyncInterpreter, OpenVulnera
+from vulnera import AsyncVulnera, OpenVulnera
 from vulnera.terminal_interface.utils.count_tokens import (
     count_messages_tokens,
     count_tokens,
@@ -165,9 +165,9 @@ def test_subprocess_language_timeout():
 
 
 def run_auth_server():
-    os.environ["INTERPRETER_REQUIRE_ACKNOWLEDGE"] = "True"
-    os.environ["INTERPRETER_API_KEY"] = "testing"
-    async_interpreter = AsyncInterpreter()
+    os.environ["VULNERA_REQUIRE_ACKNOWLEDGE"] = "True"
+    os.environ["VULNERA_API_KEY"] = "testing"
+    async_interpreter = AsyncVulnera()
     async_interpreter.print = False
     async_interpreter.server.run()
 
@@ -318,10 +318,10 @@ def test_authenticated_acknowledging_breaking_server():
 
 
 def run_server():
-    os.environ["INTERPRETER_REQUIRE_ACKNOWLEDGE"] = "False"
-    if "INTERPRETER_API_KEY" in os.environ:
-        del os.environ["INTERPRETER_API_KEY"]
-    async_interpreter = AsyncInterpreter()
+    os.environ["VULNERA_REQUIRE_ACKNOWLEDGE"] = "False"
+    if "VULNERA_API_KEY" in os.environ:
+        del os.environ["VULNERA_API_KEY"]
+    async_interpreter = AsyncVulnera()
     async_interpreter.print = False
     async_interpreter.server.run()
 
