@@ -2,10 +2,10 @@
 
 ## [0.1.3] - 2026-03-22
 ### Fixed
-- Standardized class naming: `AsyncInterpreter` to `AsyncVulnera` for project consistency.
+- Standardized class naming: `AsyncVulnera` for project consistency.
 - Updated variable names in the async core module for clarity.
 - Refreshed imports, tests, and documentation to align with the new class name.
-- Eliminated deprecated `INTERPRETER_` environment variable fallbacks, standardizing on `VULNERA_` prefixes.
+- Eliminated deprecated environment variable fallbacks, standardizing on `VULNERA_` prefixes.
 
 ## [0.1.2] - 2026-03-22
 ### Added
