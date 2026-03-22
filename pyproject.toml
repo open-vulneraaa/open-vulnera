@@ -4,7 +4,7 @@ packages = [
     {include = "vulnera"},
     {include = "scripts"},
 ]
-version = "0.1.1"
+version = "0.1.2"
 license = "Custom - Open Vulnera License v1.0"
 description = "A cybersecurity-focused AI execution engine for vulnerability research and offensive tooling"
 authors = ["Anos Wille <anos.wille@proton.me>"]
