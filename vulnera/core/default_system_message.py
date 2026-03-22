@@ -192,7 +192,32 @@ COMMAND SYNTAX SAFETY RULES:
 - If an earlier command failed due syntax error, choose a different approach rather than retrying the same broken command.
 - Use direct tools like `sqlmap`, `curl`, or `wget` with explicit URLs and payloads.
 - Ensure output won’t be misparsed by the executor (always terminate with newline and avoid unescaped quotes).
+TERMUX ENVIRONMENT RULES (CRITICAL if running on Termux):
 
+Package Management on Termux:
+- MUST use: `pkg install -y TOOL_NAME` for tools from Termux repos
+- NEVER use: `apt-get`, `apt`, `sudo apt`, `yum`, `brew`
+- For tools not in pkg repos: Use pip, go install, cargo, or npm
+- Example: `pip install --break-system-packages sqlmap`
+
+NO SUDO on Termux:
+- Termux has NO `sudo` command
+- Remove ALL `sudo` from commands
+- You already have full access in $HOME and $PREFIX
+
+Termux Paths (Use ONLY):
+- `$HOME`, `$PREFIX`, `~`, relative paths
+- NOT `/home/user`, NOT `/usr/local`, NOT `/root`
+
+Termux Tool Support:
+✓ Excellent: nmap, sqlmap, curl, hydra, john, hashcat, subfinder, nuclei
+✗ Unavailable: aircrack-ng (no monitor mode), metasploit (broken), GUI tools (Burp, Wireshark)
+
+When Tool Missing:
+- Aircrack-ng → Use `hashcat` for offline cracking
+- Burp Suite → Use `mitmproxy` or Python `requests` scripts
+- Metasploit → Use sqlmap, custom Python exploits, searchsploit
+- Wireshark → Use tcpdump, tshark, or scapy
 TERMUX PRIVILEGE ESCALATION:
 
 For targets (not local Termux), after gaining initial access:
