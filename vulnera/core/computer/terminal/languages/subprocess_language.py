@@ -1,7 +1,6 @@
 import os
 import queue
 import re
-import signal
 import subprocess
 import threading
 import time
@@ -70,17 +69,17 @@ class SubprocessLanguage(BaseLanguage):
                 try:
                     if self.process.stdin:
                         self.process.stdin.close()
-                except:
+                except Exception:
                     pass
                 try:
                     if self.process.stdout:
                         self.process.stdout.close()
-                except:
+                except Exception:
                     pass
                 try:
                     if self.process.stderr:
                         self.process.stderr.close()
-                except:
+                except Exception:
                     pass
 
             except Exception as e:
@@ -122,15 +121,15 @@ class SubprocessLanguage(BaseLanguage):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-i                # Use line buffering (bufsize=1) for real-time output streaming
+                # Use line buffering (bufsize=1) for real-time output streaming
                 # This ensures output appears immediately instead of being buffered
                 bufsize=1,
                 universal_newlines=True,
                 env=my_env,
                 encoding="utf-8",
                 errors="replace",
-                # Add session leadership to handle signals properly
-                preexec_fn=os.setsid if hasattr(os, 'setsid') else None,
+                # Add session leadership to handle signals properly (POSIX only)
+                preexec_fn=os.setsid if hasattr(os, "setsid") else None,
             )
 
             # Start output handling threads
@@ -138,13 +137,13 @@ i                # Use line buffering (bufsize=1) for real-time output streaming
                 target=self.handle_stream_output,
                 args=(self.process.stdout, False),
                 daemon=True,
-                name="stdout_handler"
+                name="stdout_handler",
             )
             stderr_thread = threading.Thread(
                 target=self.handle_stream_output,
                 args=(self.process.stderr, True),
                 daemon=True,
-                name="stderr_handler"
+                name="stderr_handler",
             )
 
             self._active_threads.extend([stdout_thread, stderr_thread])
@@ -166,7 +165,7 @@ i                # Use line buffering (bufsize=1) for real-time output streaming
             code = self.preprocess_code(code)
             if not self.process:
                 self.start_process()
-        except Exception as e:
+        except Exception:
             yield {
                 "type": "console",
                 "format": "output",
@@ -219,7 +218,7 @@ i                # Use line buffering (bufsize=1) for real-time output streaming
                     # Check if command completed
                     if self.done.is_set():
                         # Drain remaining output
-                        time.sleep(0.05)  # Brief pause for final output (reduced from 0.1)
+                        time.sleep(0.05)  # Brief pause for final output
                         while not self.output_queue.empty():
                             try:
                                 output = self.output_queue.get_nowait()
@@ -230,7 +229,7 @@ i                # Use line buffering (bufsize=1) for real-time output streaming
 
                     # Smaller sleep for more responsive output (critical for long-running commands)
                     # This allows nmap, sqlmap output to stream in real-time instead of buffering
-                    time.sleep(0.01)  # Reduced from 0.05 for faster output streaming
+                    time.sleep(0.01)
 
                 # Check if we were shutdown
                 if self._shutdown_event.is_set():
@@ -252,7 +251,7 @@ i                # Use line buffering (bufsize=1) for real-time output streaming
                 self.terminate()
                 return
 
-            except Exception as e:
+            except Exception:
                 if retry_count != 0:
                     yield {
                         "type": "console",
@@ -277,8 +276,7 @@ i                # Use line buffering (bufsize=1) for real-time output streaming
         try:
             while not self._shutdown_event.is_set():
                 try:
-                    # Use readline with non-blocking approach
-                    # This ensures each line of output is immediately queued without waiting for buffer
+                    # Use readline for line-by-line streaming
                     line = stream.readline()
                     if not line:  # EOF
                         break
@@ -289,7 +287,8 @@ i                # Use line buffering (bufsize=1) for real-time output streaming
                     line = self.line_postprocessor(line)
 
                     if line is None:
-                        continue  # `line = None` is the postprocessor's signal to discard completely
+                        # `line = None` is the postprocessor's signal to discard completely
+                        continue
 
                     if self.detect_active_line(line):
                         active_line = self.detect_active_line(line)
