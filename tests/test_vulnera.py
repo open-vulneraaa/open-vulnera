@@ -102,10 +102,16 @@ def test_shell_preprocess_blocks_complex_syntax():
 
 
 def test_subprocess_language_timeout():
-    """Test that SubprocessLanguage properly handles timeouts and shutdown."""
+    """Test that SubprocessLanguage properly handles fixed 5-minute timeout and shutdown."""
     from vulnera.core.computer.terminal.languages.subprocess_language import SubprocessLanguage
 
     lang = SubprocessLanguage()
+
+    # Ensure fixed timeout defaults to 300 seconds (5 minutes)
+    assert lang.command_timeout == 300
+    assert lang.total_timeout == 300
+
+    # Temporarily override for fast unit test
     lang.command_timeout = 1  # Very short timeout for testing
 
     # This should timeout

@@ -6,6 +6,7 @@ Enhanced with improved error handling, telemetry resilience, and autonomous oper
 """
 import json
 import os
+import re
 import threading
 import time
 from datetime import datetime
@@ -142,11 +143,70 @@ class OpenVulnera:
         self.empty_code_output_template = empty_code_output_template
         self.code_output_sender = code_output_sender
 
+        self.conversation_state = {
+            "current_target": None,
+            "current_objective": None,
+            "attack_phase": None,
+            "previous_commands": [],
+            "previous_outputs": [],
+        }
+
     def local_setup(self):
         """
         Opens a wizard that lets terminal users pick a local model.
         """
         self = local_setup(self)
+
+    def update_conversation_state(self, message):
+        """Parse user input and keep persistent state for target/objective/phase."""
+        if message is None:
+            return
+
+        content = None
+        if isinstance(message, str):
+            content = message
+        elif isinstance(message, dict) and message.get("role") == "user":
+            content = message.get("content", "")
+
+        if not content:
+            return
+
+        content_lower = content.lower()
+
+        # Target extraction for hacking-related prompt
+        target_match = re.search(r"(?:hack|attack|target)\s+([\w\d.-]+)", content_lower)
+        if target_match:
+            self.conversation_state["current_target"] = target_match.group(1)
+
+        # Objective extraction
+        if "deface" in content_lower or "website" in content_lower:
+            self.conversation_state["current_objective"] = "deface"
+        elif "sql" in content_lower or "database" in content_lower or "inject" in content_lower:
+            self.conversation_state["current_objective"] = "extract_db"
+        elif "takeover" in content_lower or "admin" in content_lower:
+            self.conversation_state["current_objective"] = "admin_takeover"
+
+        # Phase extraction
+        if any(k in content_lower for k in ["recon", "scan", "nmap", "enumeration"]):
+            self.conversation_state["attack_phase"] = "recon"
+        elif any(k in content_lower for k in ["exploit", "sqlmap", "cmd injection", "sqli"]):
+            self.conversation_state["attack_phase"] = "exploit"
+        elif any(k in content_lower for k in ["privilege", "post exploit", "escalate", "root"]):
+            self.conversation_state["attack_phase"] = "post_exploit"
+
+    def get_conversation_state_summary(self):
+        state = self.conversation_state
+        pieces = [
+            f"Target: {state.get('current_target', 'unknown')}",
+            f"Objective: {state.get('current_objective', 'unknown')}",
+            f"Phase: {state.get('attack_phase', 'unknown')}",
+        ]
+
+        if state.get("previous_commands"):
+            recent_cmds = state["previous_commands"][-3:]
+            pieces.append("Recent commands: " + ", ".join(recent_cmds))
+
+        return "\n".join(pieces)
 
     def wait(self):
         while self.responding:
@@ -186,6 +246,9 @@ class OpenVulnera:
                     if self.debug:
                         print(f"[DEBUG] Telemetry error (non-fatal): {e}")
                     pass
+
+            if message is not None:
+                self.update_conversation_state(message)
 
             if not blocking:
                 chat_thread = threading.Thread(

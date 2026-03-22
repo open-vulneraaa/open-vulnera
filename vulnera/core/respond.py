@@ -54,6 +54,11 @@ def respond(vulnera):
             "content": rendered_system_message,
         }
 
+        # If conversation state exists, include it in the system prompt for context continuity
+        state_summary = vulnera.get_conversation_state_summary()
+        if state_summary:
+            rendered_system_message["content"] += "\n\nCURRENT CONVERSATION STATE:\n" + state_summary
+
         # Create the version of messages that we'll send to the LLM
         messages_for_llm = vulnera.messages.copy()
         messages_for_llm = [rendered_system_message] + messages_for_llm
@@ -139,19 +144,9 @@ def respond(vulnera):
                         print("Removing `\n")
                     vulnera.messages[-1]["content"] = code
 
-                # ANTI-HALLUCINATION: Detect and fix common LLM hallucinations
-
-                # Hallucination 1: functions.execute() wrapper
-                if code.startswith("functions.execute("):
-                    edited_code = code.replace("functions.execute(", "").rstrip(")")
-                    try:
-                        code_dict = json.loads(edited_code)
-                        language = code_dict.get("language", language)
-                        code = code_dict.get("code", code)
-                        vulnera.messages[-1]["content"] = code
-                        vulnera.messages[-1]["format"] = language
-                    except:
-                        pass
+                # Track command in conversation state
+                if "previous_commands" in vulnera.conversation_state:
+                    vulnera.conversation_state["previous_commands"].append(code)
 
                 # Hallucination 2: Double execute suffix
                 if code.strip().endswith("executeexecute"):
@@ -310,10 +305,19 @@ def respond(vulnera):
 
                 execution_successful = True
                 execution_output = []
+                command_output = []
+
+                # Adjust attack phase from code semantics
+                if language == "shell" and re.search(r"\b(nmap|masscan|recon|enumeration)\b", code, re.I):
+                    vulnera.conversation_state["attack_phase"] = "recon"
+                elif language == "shell" and re.search(r"\b(sqlmap|sql injection|exploit|sqli|command injection)\b", code, re.I):
+                    vulnera.conversation_state["attack_phase"] = "exploit"
 
                 try:
                     for line in vulnera.computer.run(language, code, stream=True):
                         execution_output.append(line)
+                        if line.get("format") == "output":
+                            command_output.append(line.get("content", ""))
                         yield {"role": "computer", **line}
                         
                         # Check for error indicators in output
@@ -332,6 +336,10 @@ def respond(vulnera):
                     }
 
                 ## ↑ CODE EXECUTION COMPLETE ↑
+
+                # Save command output to conversation state
+                if "previous_outputs" in vulnera.conversation_state:
+                    vulnera.conversation_state["previous_outputs"].append("".join(command_output))
 
                 # Track failed attempts for loop prevention
                 if not execution_successful:

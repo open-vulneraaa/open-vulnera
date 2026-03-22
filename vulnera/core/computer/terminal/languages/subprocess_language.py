@@ -17,8 +17,9 @@ class SubprocessLanguage(BaseLanguage):
         self.verbose = False
         self.output_queue = queue.Queue()
         self.done = threading.Event()
-        self.command_timeout = 30  # seconds per command
-        self.total_timeout = 300   # max total time for operation
+        # Fixed timeout values (not configurable by external caller)
+        self.command_timeout = 300  # 5 minutes fixed command timeout
+        self.total_timeout = 300  # 5 minutes max total operation timeout
         self._shutdown_event = threading.Event()
         self._active_threads = []
 
